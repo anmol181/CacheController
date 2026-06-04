@@ -2,3 +2,5 @@
 *.log
 *.str
 .Xil/
+xsim.dir/
+*.pb
