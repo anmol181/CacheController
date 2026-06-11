@@ -1,23 +1,4 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 06/07/2026 01:45:40 PM
-// Design Name: 
-// Module Name: cache_top
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
 
 module cache_top #(
     parameter AW = 16,
@@ -127,8 +108,8 @@ module cache_top #(
         .clk(clk),
         .rst(rst),
 
-        .cpu_read_en(cpu_read_en),
-        .cpu_write_en(cpu_write_en),
+        .cpu_read_en(cache_read_en),
+        .cpu_write_en(cache_write_en),
 
         .mem_read_en(mem_read_en),
         .mem_write_en(mem_write_en),

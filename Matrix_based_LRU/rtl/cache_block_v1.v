@@ -1,24 +1,4 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 06/06/2026 03:02:32 PM
-// Design Name: 
-// Module Name: cache_block_v1
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
-
 
 module cache_block_v1 #(
     parameter AW = 16,
@@ -47,7 +27,7 @@ module cache_block_v1 #(
     output reg [AW-1 : 0]cache_miss_addr
     );
 
-    localparam BS = DW*B;
+    localparam BS = DW*B; // block size
     localparam LW = AW + BS - SW - BW;
 
     reg [LW-1 : 0] cache [S-1 : 0][W-1 : 0];
@@ -68,7 +48,7 @@ module cache_block_v1 #(
     reg [W-1:0] lru [S-1:0][W-1:0];
     reg [WW-1:0] lru_way;
 
-/////////////////////////// Combinatorial Read & Hit Logic ///////////////////////////
+    // --- Combinatorial Read & Hit Logic ---
     reg [W-1 : 0] hit_w;
     reg [WW-1 : 0] hit_way;
     
@@ -78,24 +58,26 @@ module cache_block_v1 #(
         data_out = {DW{1'b0}};
         hit = 1'b0;
         
-        for(i = 0; i < W; i = i + 1) begin
-            if(valid[index][i] && (cache[index][i][LW-1:BS] == tag)) begin
-                hit_w[i] = 1'b1;
-                hit_way = i;
-                hit = 1'b1;
-                data_out = cache[index][i][DW*addr[BW-1:0] +: DW];
+        if (!miss) begin
+            for(i = 0; i < W; i = i + 1) begin
+                if(valid[index][i] && (cache[index][i][LW-1:BS] == tag)) begin
+                    hit_w[i] = 1'b1;
+                    hit_way = i;
+                    hit = 1'b1;
+                    data_out = cache[index][i][DW*addr[BW-1:0] +: DW];
+                end
             end
         end
-        if(miss) begin
+        else begin
+            // Maintain miss routing
             data_out = cache[index][lru_way][DW*addr[BW-1:0] +: DW];
         end
     end
 
-
-/////////////////////////// Synchronous Write Logic ///////////////////////////
+    // --- Synchronous Write Logic ---
     always @(posedge clk) begin
         if(rst) begin
-            // Reset logic here
+            // Reset logic
             for (k = 0; k < S; k = k + 1) begin
                 for(i = 0;i < W;i = i + 1)begin
                     cache[k][i] <= {LW{1'b0}};
@@ -104,24 +86,25 @@ module cache_block_v1 #(
                 dirty[k] <= {W{1'b0}};
             end
         end
-        else if(write_en) begin
-            if (hit) begin
+        else begin
+            // 1. CPU is ONLY allowed to write on a guaranteed hit
+            if(cpu_write_en && hit) begin
                 cache[index][hit_way][DW*addr[BW-1:0] +: DW] <= data_in;
-                dirty[index][hit_way] <= cpu_write_en; 
+                dirty[index][hit_way] <= 1'b1; 
             end
-            else if(miss) begin
+            
+            // 2. Memory is ONLY allowed to write during an AXI Fill
+            if(mem_write_en) begin
                 cache[index][lru_way][LW-1 : BS] <= tag;
                 cache[index][lru_way][DW*addr[BW-1:0] +: DW] <= data_in;
-                dirty[index][lru_way] <= cpu_write_en;
                 valid[index][lru_way] <= 1'b1;
-            end
-            else begin
+                dirty[index][lru_way] <= 1'b0;
+                // Note: dirty is set to 0 here, because it's a fresh fetch from memory!
             end
         end
     end
 
-/////////////////////////// Lru Implementation ///////////////////////////
-
+    // --- Matrix LRU Implementation ---
     always @(posedge clk) begin
         if(rst) begin
             for (k = 0; k < S; k = k + 1) begin   
@@ -138,15 +121,9 @@ module cache_block_v1 #(
                 lru[index][i][hit_way] <= 1'b0;
             end
         end
-        else if(miss) begin
-            lru[index][lru_way] <= {W{1'b1}};
-            for(i = 0;i < W;i = i+1)begin
-                lru[index][i][lru_way] <= 1'b0;
-            end
-        end
     end
 
-
+    // --- LRU Victim Extraction ---
     always @(*) begin
         lru_way = 0;
         cache_miss_addr = 0;
