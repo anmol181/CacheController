@@ -10,7 +10,7 @@ module cache_top #(
     input  wire          clk,
     input  wire          rst,
 
-    // --- CPU Interface (Fully Decoupled Industry Standard) ---
+    // --- CPU Interface ---
     // Request Channel
     input  wire          cpu_valid,
     input  wire          cpu_ready,
