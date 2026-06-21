@@ -2,7 +2,7 @@
 
 module cache_top #(
     parameter AW = 16,
-    parameter DW = 32,
+    parameter DW = 8,
     parameter B  = 4,
     parameter W  = 4,
     parameter S  = 8
@@ -11,7 +11,7 @@ module cache_top #(
     input  wire          rst,
 
     // --- CPU Interface ---
-    // Request Channel
+
     input  wire          cpu_valid,
     input  wire          cpu_ready,
     output wire          cache_ready,
@@ -20,14 +20,7 @@ module cache_top #(
     input  wire [AW-1:0] cpu_addr,
     input  wire [DW-1:0] cpu_data_in,
     output wire [DW-1:0] cpu_data_out,
-    // input  wire [(DW/8)-1:0] cpu_req_wstrb,
-    
-    // // Response Channel // save for later on
-    // output wire          cache_resp_valid,
-    // input  wire          cpu_resp_ready,
-    // output wire [DW-1:0] cache_resp_data,
 
-    // --- AXI4 Master Interface ---
     output wire [AW-1:0] ar_addr,
     output wire [7:0]    ar_len,
     output wire          ar_valid,
@@ -47,14 +40,13 @@ module cache_top #(
     output wire          w_valid,
     output wire          w_last,
     input  wire          w_ready,
-    
+
     input  wire [1:0]    bcode,
     input  wire          bvalid,
     output wire          bready
 );
 
     wire          hit;
-    // wire          miss;
     wire          valid;
     wire          dirty;
     wire [AW-1:0] cache_miss_addr;
@@ -62,12 +54,10 @@ module cache_top #(
     wire          c_valid;
     wire          cache_read_en;
     wire          cache_write_en;
-    // wire          mem_read_en;
+    wire          mem_read_en;
     wire          mem_write_en;
     wire [DW-1:0] cache_data_in;
     wire [DW-1:0] cache_data_out;
-    
-
 
     cache_ctrl #(
         .AW(AW),
@@ -85,7 +75,6 @@ module cache_top #(
         .cache_valid(cache_valid),
 
         .hit(hit),
-        // .miss(miss),
         .valid(valid),
         .dirty(dirty),
 
@@ -99,7 +88,7 @@ module cache_top #(
         .cache_read_en(cache_read_en),
         .cache_write_en(cache_write_en),
 
-        // .mem_read_en(mem_read_en),
+        .mem_read_en(mem_read_en),
         .mem_write_en(mem_write_en),
 
         .ar_addr(ar_addr),
@@ -122,9 +111,7 @@ module cache_top #(
         .w_ready(w_ready),
         .w_valid(w_valid),
 
-        // .bvalid(bvalid),
         .bready(bready)
-        // .bcode(bcode)
     );
 
     datapath #(
@@ -137,7 +124,7 @@ module cache_top #(
         .clk(clk),
         .rst(rst),
 
-        .cache_valid(c_calid),
+        .c_valid(c_valid),
         .addr(cache_addr),
 
         .data_in(cache_data_in),
@@ -146,12 +133,11 @@ module cache_top #(
         .cache_read_en(cache_read_en),
         .cache_write_en(cache_write_en),
 
-        // .mem_read_en(mem_read_en),
+        .mem_read_en(mem_read_en),
         .mem_write_en(mem_write_en),
 
         .hit(hit),
 
-        // .miss(miss),
         .valid(valid),
         .dirty(dirty),
         .cache_miss_addr(cache_miss_addr)
