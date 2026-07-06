@@ -3,11 +3,7 @@
 module cache_ctrl#(
     parameter AW = 32,
     parameter DW = 8,
-    parameter W = 8,
-    parameter S = 8,
     parameter B = 4,
-    parameter WW = $clog2(W),
-    parameter SW = $clog2(S),
     parameter BW = $clog2(B)
 )(
     input wire clk,
@@ -19,16 +15,22 @@ module cache_ctrl#(
     input wire [AW-1:0] cpu_addr,
     input wire [DW-1:0] cpu_wdata,
     output reg [DW-1:0] cpu_rdata,
-    input wire          snoop_valid,
-    output reg          ask_snoop, ////////////////////////////////////////////////////
-    input wire          snoop_ask,
+    output reg          cpu_ready, // Added: Tells CPU when data is valid/written
+
+    // --- interconnect signals ---
+    output reg          ask_snoop,
+    input wire          snoop_stall,
+    input               snoop_data_valid, // Added: Tells controller when snoop_wdata is valid
+    input wire [DW-1:0] snoop_data_in, // Added: Receives data from interconnect during snoop_read
+    // input wire          snoop_valid,   // Kept for port compatibility, but no longer strictly needed
 
     // --- datapath signals ---
     input wire [AW-1:0] cache_miss_addr,
     input wire [1:0]    miss_mesi_state,
     input wire          hit,
     input wire          snoop_hit,
-    output reg [AW-1:0] snoop_addr, ////////////////////////////////////////////////////
+    
+    // (Removed snoop_addr, snoop_signal, snoop_stall, snoop_req, snoop_rw to prevent multiple-driver collision)
 
     output reg [AW-1:0] cache_addr,
     output reg [DW-1:0] cache_wdata,
@@ -37,16 +39,12 @@ module cache_ctrl#(
     output reg          cache_rw,
     output reg          mem_req,
     output reg          mem_rw,
-    output reg          snoop_req,
-    output reg          snoop_rw,
-    output reg [1:0]    snoop_signal,
-    output reg          snoop_stall,
 
     // --- memory signals ---
     output reg          ar_valid,
-    output reg          ar_addr,
-    output reg          ar_len,
-    output reg          ar_ready,
+    output reg [AW-1:0] ar_addr,
+    output reg [7:0]    ar_len,
+    input  wire         ar_ready,
 
     input wire          r_valid,
     input wire [DW-1:0] r_data,
@@ -56,41 +54,13 @@ module cache_ctrl#(
     output reg [AW-1:0] aw_addr,
     output reg          aw_valid,
     input wire          aw_ready,
-    output reg          aw_len,
+    output reg [7:0]    aw_len,
 
     output reg          w_valid,
     output reg [DW-1:0] w_data,
     input wire          w_ready,
     output reg          w_last
-
-    );
-
-    // --- fsm logic ---
-
-    // inital state : st
-    // if cpu_rw == 0 && cpu_req == 1 st = cpu_read
-        // if  hit : state = st
-        // else
-            // if miss state == M
-                // state : mem_write then
-                // if snoop_hit
-                    // state = snoop_read
-                    // else mem_read
-            // else
-                // if snoop_hit
-                    // state = snoop_read - | then cpu read
-                // else state = mem_read -- | then cpu read
-    // if cpu_rw == 1 && cpu_req == 1 st = cpu_write
-        // if hit : state = st;
-        // if miss state == M
-                // state : mem_write then
-                // if snoop_hit
-                    // state = snoop_read
-                    // else mem_read
-            // else
-                // if snoop_hit
-                    // state = snoop_read - | then cpu write
-                // else state = mem_read -- | then cpu write
+);
 
     localparam st = 0;
     localparam cpu_read = 1;
@@ -98,15 +68,12 @@ module cache_ctrl#(
     localparam mem_read = 3;
     localparam mem_write = 4;
     localparam snoop_read = 5;
-    localparam snoop_write = 6;// stall case : where cache needs to give data to other cores
+    localparam snoop_write = 6;
     localparam mem_read_req = 7;
     localparam mem_write_req = 8;
     localparam wt = 9;
 
     localparam m = 0;
-    localparam e = 1;
-    localparam s = 2;
-    localparam i = 3;
 
     reg [3:0] state;
     reg [3:0] saved_state;
@@ -124,11 +91,13 @@ module cache_ctrl#(
     always @(posedge clk) begin
         if(rst) begin
             state <= st;
+            saved_state <= st;
             cnt_mem <= 0;
             cnt_snoop <= 0;
         end
         else begin
-            if (snoop_ask && state != snoop_write && state != mem_read && state != mem_write && state != mem_read_req && state != mem_write_req) begin
+            // Burst Lock: Protects memory states from being interrupted
+            if (snoop_stall && state != snoop_write && state != mem_read && state != mem_write && state != mem_read_req && state != mem_write_req) begin
                 saved_state <= state;
                 state <= snoop_write;
                 cnt_snoop <= 0;
@@ -186,8 +155,13 @@ module cache_ctrl#(
                         end
                     end
                     snoop_read : begin
-                        if(r_last && snoop_valid) begin
-                            state <= wt;
+                        if (snoop_data_valid) begin // ONLY increment when data is valid!
+                            if (cnt_mem == B-1) begin
+                                state <= wt;
+                                cnt_mem <= 0;
+                            end else begin
+                                cnt_mem <= cnt_mem + 1;
+                            end
                         end
                     end
                     snoop_write : begin
@@ -207,10 +181,10 @@ module cache_ctrl#(
         end
     end
 
-    // signal assignment
-always @(*) begin
+    // --- combinational assignments ---
+    always @(*) begin
         // DEFAULT ASSIGNMENTS
-        cache_addr   = saved_addr; 
+        cache_addr   = saved_addr;
         cache_wdata  = 0;
         cache_req    = 0;
         cache_rw     = 0;
@@ -227,12 +201,8 @@ always @(*) begin
         w_last       = 0;
         r_ready      = 0;
         ask_snoop    = 0;
-        snoop_stall  = 0;
-        snoop_addr   = 0;
-        snoop_rw     = 0;
-        snoop_signal = 0;
-        snoop_req    = 0;
         cpu_rdata    = 0;
+        cpu_ready    = 0;
 
         case(state)
             st : begin
@@ -263,8 +233,12 @@ always @(*) begin
                         end
                     end
                 end
-                // On hit, pass data back to CPU
-                if (hit && state == cpu_read) cpu_rdata = cache_rdata;
+                
+                // Assert cpu_ready and feed data back on a hit
+                if (hit) begin
+                    cpu_ready = 1'b1;
+                    if (state == cpu_read) cpu_rdata = cache_rdata;
+                end
             end
             mem_write_req : begin
                 aw_valid = 1'b1;
@@ -293,11 +267,17 @@ always @(*) begin
                     mem_req     = 1'b1;
                 end
             end
+            snoop_read : begin
+                ask_snoop = 1'b1; // Always assert to keep interconnect engaged
+                if (snoop_data_valid) begin // ONLY write to datapath when valid!
+                    cache_addr  = {saved_addr[AW-1:BW], {BW{1'b0}}} + cnt_mem;
+                    cache_wdata = snoop_data_in;
+                    mem_rw      = 1'b1;
+                    mem_req     = 1'b1;
+                end
+            end
             snoop_write : begin
-                snoop_stall  = 1'b1;
-                snoop_addr   = {saved_addr[AW-1:BW], {BW{1'b0}}} + cnt_snoop;
-                snoop_rw     = 1'b0;
-                snoop_signal = 2'b01;
+                // Do nothing. Interconnect directly drives datapath to pull data out.
             end
             wt : begin
                 cache_addr  = saved_addr;
