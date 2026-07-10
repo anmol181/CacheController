@@ -139,26 +139,25 @@ module datapath#(
             else next_state_cpu = e;
 
             // PORT B Next State
-            if (snoop_signal == 2'b01) next_state_snoop = s;
+            if (s1_snoop_signal == 2'b01) next_state_snoop = s;
             else next_state_snoop = i;
         end
 
         for(w_idx = 0; w_idx < W; w_idx = w_idx + 1) begin : state_array
-            (* ram_style = "block" *) reg [1:0] state_mem [0:S-1];
+            (* ram_style = "distributed" *) reg [1:0] state_mem [0:S-1];
 
-            // --- PORT A ---
+            // --- COMBINED PORT A & B ---
             always @(posedge clk) begin
-                if(state_cpu_we[w_idx] || state_mem_we[w_idx]) begin
-                    state_mem[s1_index] <= next_state_cpu;
-                end
-                state_out_cpu[w_idx] <= state_mem[index];
-            end
-
-            // --- PORT B ---
-            always @(posedge clk) begin
+                // Write Port (Snoop has priority over CPU to prevent stale data races)
                 if(state_snoop_we[w_idx]) begin
                     state_mem[s1_snoop_index] <= next_state_snoop;
                 end
+                else if(state_cpu_we[w_idx] || state_mem_we[w_idx]) begin
+                    state_mem[s1_index] <= next_state_cpu;
+                end
+
+                // Read Ports (Dual continuous reads are perfectly fine)
+                state_out_cpu[w_idx]   <= state_mem[index];
                 state_out_snoop[w_idx] <= state_mem[snoop_index];
             end
         end
@@ -207,7 +206,7 @@ module datapath#(
 
         // 2. Hit Evaluation
         for(loop = 0; loop < W; loop = loop + 1) begin
-            if(s1_tag == tag_out_cpu[loop] && state_out_cpu[loop] != i) begin
+            if(s1_tag == tag_out_cpu[loop] && state_out_cpu[loop] != i && !s1_mem_req) begin
                 hit = 1'b1;
                 hit_way = loop[WW-1:0];
             end
@@ -223,6 +222,10 @@ module datapath#(
             data_we = 1 << lru_way;
             state_mem_we = 1 << lru_way;
         end
+        else if (s1_cache_rw && s1_cache_req && hit) begin
+            data_we = 1 << hit_way;         // Write the 0xAA to the BRAM
+            state_cpu_we = 1 << hit_way;    // Upgrade MESI state to Modified (m)
+        end
 
         if(s1_snoop_req) begin
             case(s1_snoop_signal)
@@ -231,8 +234,8 @@ module datapath#(
                 end
                 2'b10 : begin // Write (Update)
                     state_snoop_we = 1 << snoop_hit_way;
-                    tag_we = 1 << snoop_hit_way;
-                    data_we = 1 << snoop_hit_way;
+                    // tag_we = 1 << snoop_hit_way;
+                    // data_we = 1 << snoop_hit_way;
                 end
                 2'b11 : begin // Invalidate
                     state_snoop_we = 1 << snoop_hit_way; // Fixed

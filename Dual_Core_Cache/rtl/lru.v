@@ -3,20 +3,20 @@
 module lru#(
     parameter W = 8,
     parameter S = 8,
-    parameter WW = $clog2(W),
-    parameter SW = $clog2(S)
+    parameter SW = $clog2(S),
+    parameter WW = $clog2(W)
 )(
     input               clk,
     input               rst,
 
     input wire          hit,
-    input wire [S-1:0]  s1_index,
+    input wire [SW-1:0]  s1_index,
     output reg [WW-1:0] lru_way,
     input wire [WW-1:0] hit_way
     );
 
     reg [W-2:0] plru [0:S-1];
-    integer cnt;
+    reg [7:0] cnt;
     integer i_rst;
     integer i_upd;
     integer i_dcd;
@@ -36,7 +36,7 @@ module lru#(
         end
     end
 
-    integer way_cnt;
+    reg [7:0] way_cnt;
     always @(*) begin
         way_cnt = 0;
         for (i_dcd = WW-1; i_dcd >= 0; i_dcd = i_dcd - 1) begin

@@ -1,11 +1,14 @@
 `timescale 1ns / 1ps
 
 module cache_top #(
-    parameter AW = 32,
+    parameter AW = 16,
     parameter DW = 8,
     parameter B  = 4,
     parameter S  = 8,
-    parameter W  = 8
+    parameter W  = 8,
+    parameter BW = $clog2(B),
+    parameter SW = $clog2(S),
+    parameter WW = $clog2(W)
 )(
     input  wire          clk,
     input  wire          rst,
@@ -27,10 +30,11 @@ module cache_top #(
     input  wire [1:0]    snoop_signal,
     input  wire [DW-1:0] snoop_wdata, // Data streaming IN from another cache
     input  wire          snoop_data_valid,
+    input  wire          snoop_hit_in,
 
     // Outputs to Interconnect
     output wire [DW-1:0] snoop_rdata, // Data streaming OUT to another cache
-    output wire          snoop_hit,   // Tells interconnect this cache has the requested line
+    output wire          snoop_hit_out,   // Tells interconnect this cache has the requested line
     output wire          snoop_dirty, // Tells interconnect the hit line is Modified (needs write-back)
     output wire          ask_snoop,   // Tells interconnect this cache is ready to receive data
     output wire          cpu_hit,     // Exposed to tell interconnect if a local hit occurred during snoop check
@@ -74,11 +78,8 @@ module cache_top #(
 
     assign cpu_hit = hit_int;
 
-    wire snoop_hitt;
-    assign snoop_hit = snoop_hitt;
-
     cache_ctrl #(
-        .AW(AW), .DW(DW), .W(W), .S(S), .B(B)
+        .AW(AW), .DW(DW), .W(W), .S(S), .B(B), .BW(BW), .SW(SW), .WW(WW)
     ) CTRL (
         .clk(clk),
         .rst(rst),
@@ -101,7 +102,7 @@ module cache_top #(
         .cache_miss_addr(cache_miss_addr_int),
         .miss_mesi_state(cache_miss_state_int),
         .hit(hit_int),
-        .snoop_hit(snoop_hitt),
+        .snoop_hit_in(snoop_hit_in),
 
         // Internal Datapath Control
         .cache_addr(cache_addr_int),
@@ -159,7 +160,7 @@ module cache_top #(
         // Status Outputs
         .cache_miss_addr(cache_miss_addr_int),
         .cache_miss_state(cache_miss_state_int),
-        .snoop_hit(snoop_hitt),
+        .snoop_hit(snoop_hit_out),
         .snoop_dirty(snoop_dirty),
         .hit(hit_int),
         .snoop_valid(snoop_valid)

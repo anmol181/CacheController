@@ -54,10 +54,15 @@ module dualcore #(
     output wire          mem_r_ready
 );
 
+    localparam BW = $clog2(B);
+    localparam SW = $clog2(S);
+    localparam WW = $clog2(W);
+
 
     // Internal Wires: Core 0 <-> Interconnect
 
-    wire          c0_snoop_hit;
+    wire          c0_snoop_hit_in;
+    wire          c0_snoop_hit_out;
     wire          c0_cpu_hit;
     wire [AW-1:0] c0_snoop_addr;
     wire          c0_ask_snoop;
@@ -91,7 +96,8 @@ module dualcore #(
 
     // Internal Wires: Core 1 <-> Interconnect
 
-    wire          c1_snoop_hit;
+    wire          c1_snoop_hit_in;
+    wire          c1_snoop_hit_out;
     wire          c1_cpu_hit;
     wire [AW-1:0] c1_snoop_addr;
     wire          c1_ask_snoop;
@@ -131,7 +137,10 @@ module dualcore #(
         .DW(DW),
         .W(W),
         .S(S),
-        .B(B)
+        .B(B),
+        .BW(BW),
+        .SW(SW),
+        .WW(WW)
     ) CORE_0 (
         .clk(clk),
         .rst(rst),
@@ -154,7 +163,8 @@ module dualcore #(
 
         // Snoop Interconnect Outputs
         .snoop_rdata(c0_snoop_rdata),
-        .snoop_hit(c0_snoop_hit),
+        .snoop_hit_in(c0_snoop_hit_in),
+        .snoop_hit_out(c0_snoop_hit_out),
         .snoop_dirty(c0_snoop_dirty),
         .ask_snoop(c0_ask_snoop),
         .cpu_hit(c0_cpu_hit),
@@ -186,7 +196,10 @@ module dualcore #(
         .DW(DW),
         .W(W),
         .S(S),
-        .B(B)
+        .B(B),
+        .BW(BW),
+        .SW(SW),
+        .WW(WW)
     ) CORE_1 (
         .clk(clk),
         .rst(rst),
@@ -204,11 +217,13 @@ module dualcore #(
         .snoop_addr(c1_snoop_addr),
         .snoop_signal(c1_snoop_signal),
         .snoop_wdata(c1_snoop_wdata),
+        .snoop_data_valid(c1_snoop_data_valid),
         .snoop_valid(c1_snoop_valid),
 
         // Snoop Interconnect Outputs
         .snoop_rdata(c1_snoop_rdata),
-        .snoop_hit(c1_snoop_hit),
+        .snoop_hit_in(c1_snoop_hit_in),
+        .snoop_hit_out(c1_snoop_hit_out),
         .snoop_dirty(c1_snoop_dirty),
         .ask_snoop(c1_ask_snoop),
         .cpu_hit(c1_cpu_hit),
@@ -247,7 +262,8 @@ module dualcore #(
         .cpu_req0(cpu_req0),
         .snoop_req0(c0_snoop_req),
         .cpu_hit0(c0_cpu_hit),
-        .snoop_hit0(c0_snoop_hit),
+        .snoop_hit_in0(c0_snoop_hit_in),
+        .snoop_hit_out0(c0_snoop_hit_out),
         .cpu_rw0(cpu_rw0),
         .cpu_addr0(cpu_addr0),
         .snoop_addr0(c0_snoop_addr),
@@ -267,7 +283,8 @@ module dualcore #(
         .cpu_req1(cpu_req1),
         .snoop_req1(c1_snoop_req),
         .cpu_hit1(c1_cpu_hit),
-        .snoop_hit1(c1_snoop_hit),
+        .snoop_hit_in1(c1_snoop_hit_in),
+        .snoop_hit_out1(c1_snoop_hit_out),
         .cpu_rw1(cpu_rw1),
         .cpu_addr1(cpu_addr1),
         .snoop_addr1(c1_snoop_addr),
